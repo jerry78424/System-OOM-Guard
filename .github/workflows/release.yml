@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# softprops/action-gh-release 需要寫入權限來建立 Release 與上傳 assets
+permissions:
+  contents: write
+
+env:
+  TARGET: x86_64-pc-windows-msvc
+  BIN: System-OOM-Guard
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.TARGET }}
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build (release)
+        run: cargo build --release --target ${{ env.TARGET }}
+
+      - name: Package artifacts
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}"
+          $exe = "target/${{ env.TARGET }}/release/${{ env.BIN }}.exe"
+          if (-not (Test-Path $exe)) { throw "找不到建置產物: $exe" }
+          $out = "dist"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item $exe "$out/$($env:BIN).exe"
+          Compress-Archive -Path $exe -DestinationPath "$out/$($env:BIN)-$ver.zip"
+          Get-ChildItem $out | Format-Table Name, Length
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/${{ env.BIN }}.exe
+            dist/${{ env.BIN }}-${{ github.ref_name }}.zip
