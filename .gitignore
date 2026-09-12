@@ -1,0 +1,17 @@
+# 建置產物（cargo 建置輸出，勿提交）
+/target
+
+# 執行期在本機產生、不需提交的檔案
+config.json
+*.log
+*.log.*
+
+# Windows 除錯符號等零散產物（通常在 target 內，这里再兜底）
+*.pdb
+*.ilk
+*.obj
+
+# 編輯器／系統
+.vs/
+Thumbs.db
+.DS_Store
