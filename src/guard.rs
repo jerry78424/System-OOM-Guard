@@ -15,7 +15,6 @@ use windows_sys::Win32::Security::{
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
 };
-use windows_sys::Win32::System::Memory::SetSystemFileCacheSize;
 use windows_sys::Win32::System::ProcessStatus::{
     GetProcessImageFileNameW, GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS,
     PROCESS_MEMORY_COUNTERS_EX,
@@ -85,12 +84,6 @@ pub fn memory_status() -> (u64, u64) {
         } else {
             (0, 0)
         }
-    }
-}
-
-pub fn clear_standby() {
-    unsafe {
-        SetSystemFileCacheSize(usize::MAX, usize::MAX, 0);
     }
 }
 
@@ -684,14 +677,6 @@ fn run_cycle(app: &App) {
     }
 
     if pressured {
-        // Standby 回收節流：壓力期間每 2 秒至多一次（500ms 輪詢下避免每輪都回收）
-        let mut ls = app.last_standby.lock().unwrap();
-        if ls.elapsed() >= Duration::from_secs(2) {
-            clear_standby();
-            *ls = std::time::Instant::now();
-        }
-        drop(ls);
-
         let mut lk = app.last_kill.lock().unwrap();
         let elapsed = lk.elapsed().unwrap_or(Duration::from_secs(u64::MAX));
         if elapsed.as_secs() >= cooldown as u64 {

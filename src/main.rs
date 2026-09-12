@@ -12,7 +12,7 @@ mod util;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Condvar, Mutex};
-use std::time::{Instant, SystemTime};
+use std::time::SystemTime;
 
 use windows_sys::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS, HWND};
 use windows_sys::Win32::System::Threading::CreateMutexW;
@@ -77,14 +77,6 @@ fn main() {
         log_queue: Mutex::new(VecDeque::new()),
         last_kill: Mutex::new(SystemTime::now()),
         recent_kills: Mutex::new(HashMap::new()),
-        // 讓首次進入壓力時能立即回收 standby：把基準設為「60 秒前」。
-        // 但開機 60 秒內 Instant::now()-60s 會下溢 panic（配合 panic=abort 即閃退，
-        // 恰好命中開機自啟情境），故用 checked_sub 回退為 now，絕不下溢。
-        last_standby: Mutex::new(
-            Instant::now()
-                .checked_sub(std::time::Duration::from_secs(60))
-                .unwrap_or_else(Instant::now),
-        ),
         log_path,
         config_path,
         exe_path,

@@ -30,8 +30,6 @@ pub struct App {
     pub last_kill: Mutex<SystemTime>,
     /// 近期已處理的進程（避免 zombie 重複終止），PID → 時間戳
     pub recent_kills: Mutex<HashMap<u32, Instant>>,
-    /// 最近一次 Standby 回收時間，用於節流（避免壓力期間每 500ms 都回收一次）
-    pub last_standby: Mutex<Instant>,
     pub log_path: String,
     pub config_path: String,
     pub exe_path: String,
