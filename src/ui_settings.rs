@@ -16,7 +16,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     GetWindowTextW, IsDialogMessageW, MINMAXINFO, MoveWindow, RegisterClassExW, SendMessageW,
     SetWindowLongPtrW, SetWindowPos, SetWindowTextW, ShowWindow, TranslateMessage, BM_GETCHECK,
     BM_SETCHECK, BS_AUTOCHECKBOX, BS_PUSHBUTTON, CREATESTRUCTW, CW_USEDEFAULT, ES_AUTOVSCROLL,
-    ES_MULTILINE, ES_NUMBER, GWLP_USERDATA, HMENU, MSG, SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER,
+    ES_MULTILINE, ES_NUMBER, ES_WANTRETURN, GWLP_USERDATA, HMENU, MSG, SW_SHOW, SWP_NOACTIVATE,
+    SWP_NOZORDER,
     WS_BORDER, WS_CAPTION, WS_CHILD, WS_EX_CLIENTEDGE, WS_OVERLAPPED, WS_SYSMENU, WS_TABSTOP,
     WS_THICKFRAME, WS_VISIBLE, WS_VSCROLL, WM_COMMAND, WM_CREATE, WM_DESTROY, WM_DPICHANGED,
     WM_GETMINMAXINFO, WM_KEYDOWN, WM_SETFONT, WM_SIZE,
@@ -451,7 +452,7 @@ unsafe extern "system" fn settings_wndproc(
                 &util::to_wide("EDIT"),
                 &util::to_wide(""),
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_MULTILINE as u32 | ES_AUTOVSCROLL as u32
-                    | WS_VSCROLL | WS_BORDER,
+                    | ES_WANTRETURN as u32 | WS_VSCROLL | WS_BORDER,
                 WS_EX_CLIENTEDGE,
                 IDC_PROTECTED,
             );
