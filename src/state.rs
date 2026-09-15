@@ -33,6 +33,8 @@ pub struct App {
     pub log_path: String,
     pub config_path: String,
     pub exe_path: String,
+    /// 執行中 sentinel 檔路徑（run.pid）：殘留代表上次非正常結束，供下次啟動偵測閃退
+    pub marker_path: String,
     pub admin: bool,
     pub exiting: AtomicBool,
     pub icons: IconSet,

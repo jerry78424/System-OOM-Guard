@@ -30,6 +30,7 @@ cargo build --release
 - 直接執行：啟動 GUI 常駐；非管理員時會嘗試自我提權（`runas`）。
 - `--no-elevate`：跳過自我提權（測試／低權限環境用）。
 - `--settings`：啟動時直接開啟設定視窗。
+- `--crashtest`：診斷用，故意觸發一次 panic，用來驗證閃退攔截器會寫入 `crash.log`。
 
 建議以**管理員身分**執行，否則終止其他使用者／高權限進程可能失敗。
 
@@ -54,6 +55,12 @@ cargo build --release
 - `KillTree=true`（預設）：`collect_descendants` 快照後代 → 逐一終止（跳過受保護者、做 PID 重用影像名稱核對）→ 再終止目標。
 - 結果型別 `KillResult`：`Killed` / `AlreadyDead` / `Pending`（要求已送出、拆除中，不阻塞）/ `Failed`。
 - 近期已處理 PID 有 30 秒冷卻，避免 zombie／拆除中進程被重複選中。
+
+## 閃退偵測與記錄
+`release` 採用 `panic = "abort"`，任何 panic／存取違規／堆疊溢出／OOM 都會讓程式瞬間結束且不經正常清理。為此有兩層攔截：
+- **Panic 攔截器**：安裝於 `main` 最前段，把 panic 的執行緒、訊息、來源 `檔案:行號` 附加到 `crash.log`。Windows 下存取違規也會經 panic 機制，故多數硬崩潰都能留下來源。（`--crashtest` 可自測此路徑。）
+- **執行中 sentinel（`run.pid`）**：啟動寫入目前 PID＋啟動時間；正常結束、或收到系統關機／重啟／登出（`WM_ENDSESSION`）時移除。下次啟動若標記仍殘留，代表上次**未正常結束**（可能堆疊溢出／OOM／被外部終止等不經 hook 的死法），會同時在 `System-OOM-Guard.log` 與 `crash.log` 記錄「上次未正常結束」及前次標記。
+- `crash.log`、`run.pid` 寫在執行檔資料夾（已列入 `.gitignore`，不提交）。
 
 ## 平台限制
 僅支援 **Windows**（大量使用 Win32/ntdll API）。

@@ -30,7 +30,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     GWLP_USERDATA, HICON, HMENU, IDC_ARROW, MF_SEPARATOR, MF_STRING, SM_CXSCREEN, SM_CYSCREEN,
     SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SW_HIDE,
     SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_CLOSE, WM_COMMAND,
-    WM_CREATE, WM_CTLCOLORSTATIC, WM_DESTROY, WM_DPICHANGED, WM_EXITSIZEMOVE, WM_GETTEXTLENGTH,
+    WM_CREATE, WM_CTLCOLORSTATIC, WM_DESTROY, WM_DPICHANGED, WM_ENDSESSION, WM_EXITSIZEMOVE,
+    WM_GETTEXTLENGTH,
     WM_LBUTTONDBLCLK, WM_RBUTTONUP, WM_SETFONT, WM_SIZE, WM_TIMER, WM_USER, WS_CHILD,
     WS_OVERLAPPEDWINDOW, WS_TABSTOP, WS_VISIBLE, WS_VSCROLL, WS_EX_CLIENTEDGE,
 };
@@ -823,6 +824,18 @@ unsafe extern "system" fn main_wndproc(
                 }
             }
             0
+        }
+        WM_ENDSESSION => {
+            // 系統正在關機／重啟／登出（wparam!=0 代表工作階段確實在結束）：
+            // 這是可預期的終止，移除 sentinel，避免下次啟動把它誤判成閃退。
+            if wparam != 0 {
+                let ctx = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut MainCtx;
+                if !ctx.is_null() {
+                    let c = &*ctx;
+                    crate::crash::remove_run_marker(&c.app.marker_path);
+                }
+            }
+            DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         WM_CLOSE => {
             let ctx = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut MainCtx;

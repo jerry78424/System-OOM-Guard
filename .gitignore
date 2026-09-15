@@ -5,6 +5,7 @@
 config.json
 *.log
 *.log.*
+run.pid
 
 # Windows 除錯符號等零散產物（通常在 target 內，这里再兜底）
 *.pdb
