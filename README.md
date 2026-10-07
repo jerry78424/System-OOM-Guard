@@ -31,6 +31,7 @@ cargo build --release
 - `--no-elevate`：跳過自我提權（測試／低權限環境用）。
 - `--settings`：啟動時直接開啟設定視窗。
 - `--crashtest`：診斷用，故意觸發一次 panic，用來驗證閃退攔截器會寫入 `crash.log`。
+- `--watch`：探活用（由復活排程工作每分鐘呼叫）。已有實例在跑則安靜退出；沒有則自己成為新實例（被殺後 ≤60 秒復活）。
 
 建議以**管理員身分**執行，否則終止其他使用者／高權限進程可能失敗。
 
@@ -47,6 +48,7 @@ cargo build --release
 | `AutoStart` | true | 開機自啟（登入排程任務） |
 | `AutoGuard` | true | 程式啟動後自動啟用護欄 |
 | `KillTree` | true | 終止時連帶殺死整棵子進程樹 |
+| `ReviveWatch` | true | 復活探活：每分鐘排程 `--watch`，被外部終止後 ≤60 秒自動重啟；正常結束會自動移除該排程 |
 
 `config.json` 與 `System-OOM-Guard.log` 會寫在執行檔所在資料夾（已列入 `.gitignore`，不提交）。
 
@@ -62,6 +64,12 @@ cargo build --release
 - **執行中 sentinel（`run.pid`）**：啟動寫入目前 PID＋啟動時間；正常結束、或收到系統關機／重啟／登出（`WM_ENDSESSION`）時移除（移除失敗會記錄到 `crash.log`，避免偽裝成閃退）。下次啟動若標記仍殘留，代表上次**未正常結束**（可能堆疊溢出／OOM／被外部終止等不經 hook 的死法），會同時在 `System-OOM-Guard.log` 與 `crash.log` 記錄「上次未正常結束」及前次標記。
 - **可區分性**：正常結束會寫一行「已正常結束（結束程式）」；主視窗每 10 分鐘寫一行「心跳」，把閃退的「最後確認存活」時間縮到分鐘級。若外部以 `TerminateProcess` 終止本程式则完全無痕（不經 hook、不產生 WER），只能靠 sentinel＋心跳間接推定。
 - `crash.log`、`run.pid` 寫在執行檔資料夾（已列入 `.gitignore`，不提交）。
+
+## 與反外掛共存
+反外掛多具備核心層權限與 `SeDebugPrivilege`，可繞過任何用戶態防護——「不被殺」做不到，能做的是不給它動手理由＋被殺後自動復活：
+- **按需權限**：`SeDebugPrivilege` 只在終止動作的瞬間啟用、完即釋放（常駐持有該權限是高可疑特徵）。
+- **預設保護名單**含遊戲與其反外掛（`bluearchive`、`grap-core64.aes`）：護欄不會去殺它們，避免引來反制。
+- **復活探活**（`ReviveWatch`）：每分鐘排程工作以 `--watch` 探活，被殺 ≤60 秒復活；托盤「結束」正常退出會自動移除此排程，不干預自願退出。
 
 ## 平台限制
 僅支援 **Windows**（大量使用 Win32/ntdll API）。

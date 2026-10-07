@@ -49,6 +49,9 @@ fn main() {
     let open_settings = args
         .iter()
         .any(|a| a.eq_ignore_ascii_case("--settings"));
+    let watch_only = args
+        .iter()
+        .any(|a| a.eq_ignore_ascii_case("--watch"));
     let admin = unsafe { IsUserAnAdmin() != 0 };
 
     if !admin && !no_elevate {
@@ -61,9 +64,12 @@ fn main() {
         let m = CreateMutexW(std::ptr::null(), 1, util::to_wide("Local\\SystemOOMGuardSingleInstance").as_ptr());
         if GetLastError() == ERROR_ALREADY_EXISTS {
             let _ = m;
-            // 已有實例在跑：廣播激活訊息把它帶到前景後結束自己
+            // 已有實例在跑：广播激活訊息把它帶到前景後結束自己
             // （第二實例不得碰 sentinel，那是正在運行實例所擁有）
-            PostMessageW(0xFFFF as HWND, ui_main::activate_message_id(), 0, 0);
+            // --watch 探活：已在跑就安靜退出，不抓前景（否則每分鐘搶-focus）
+            if !watch_only {
+                PostMessageW(0xFFFF as HWND, ui_main::activate_message_id(), 0, 0);
+            }
             return;
         }
     }
@@ -119,6 +125,14 @@ fn main() {
         }
     }
 
+    // 復活探活排程（ReviveWatch）：被外部終止後 ≤60 秒自動重啟；正常結束會移除。
+    let revive_watch = app.config.lock().unwrap().revive_watch;
+    if revive_watch {
+        autostart::enable_watch(&app.exe_path);
+    } else {
+        autostart::disable_watch();
+    }
+
     unsafe {
         ui_main::register_main_class();
         let hwnd: HWND = ui_main::create_main_window(app.clone());
@@ -152,7 +166,11 @@ fn main() {
         }
     }
 
-    // 訊息迴圈正常返回（走 WM_DESTROY→PostQuitMessage 的乾淨結束路徑）：移除 sentinel
+    // 訊息迴圈正常返回（走 WM_DESTROY→PostQuitMessage 的乾淨結束路徑）：
+    // 正常結束＝使用者自願退出 → 移除復活排程（之後不再自動復活）＋移除 sentinel
+    if revive_watch {
+        autostart::disable_watch();
+    }
     if let Err(e) = crash::remove_run_marker(&marker_path) {
         crash::append_crash(
             &crash_path,
