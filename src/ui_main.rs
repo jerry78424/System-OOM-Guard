@@ -1,7 +1,7 @@
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
@@ -99,6 +99,8 @@ struct MainCtx {
     font_log: HFONT,
     font_btn: HFONT,
     status_color: AtomicU32,
+    // 心跳：每 10 分鐘一行存活記錄，把閃退「最後確認存活」縮到分鐘級
+    hb_last: Instant,
     // 變更偵測快取：內容沒變就不呼叫 Win32（避免每秒重繪與托盤 IPC）
     ui_cache: std::sync::Mutex<UiCache>,
 }
@@ -160,6 +162,7 @@ pub unsafe fn create_main_window(app: Arc<App>) -> HWND {
         font_log: std::ptr::null_mut(),
         font_btn: std::ptr::null_mut(),
         status_color: AtomicU32::new(COLOR_GREEN),
+        hb_last: Instant::now(),
         ui_cache: std::sync::Mutex::new(UiCache::default()),
     });
     let ctx_ptr = Box::into_raw(ctx);
@@ -663,7 +666,18 @@ unsafe extern "system" fn main_wndproc(
         WM_TIMER => {
             let ctx = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut MainCtx;
             if !ctx.is_null() {
-                update_status(&mut *ctx);
+                let c = &mut *ctx;
+                update_status(c);
+                // 心跳：固定 10 分鐘一行，供閃退鑑識把死亡窗口縮到分鐘級
+                if c.hb_last.elapsed() >= Duration::from_secs(600) {
+                    c.hb_last = Instant::now();
+                    let (running, used) = {
+                        let snap = c.app.snapshot.lock().unwrap();
+                        (snap.running, snap.used_percent)
+                    };
+                    let state = if running { "護欄運行中" } else { "護欄未啟動" };
+                    util::append_log(&c.app, &format!("[System] 心跳：{state}，使用率 {used:.1}%"));
+                }
             }
             0
         }
@@ -832,7 +846,15 @@ unsafe extern "system" fn main_wndproc(
                 let ctx = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut MainCtx;
                 if !ctx.is_null() {
                     let c = &*ctx;
-                    crate::crash::remove_run_marker(&c.app.marker_path);
+                    if let Err(e) = crate::crash::remove_run_marker(&c.app.marker_path) {
+                        crate::crash::append_crash(
+                            &c.app.crash_path,
+                            &format!(
+                                "[{}] [Crash] 系統結束但移除 run.pid 失敗（下次會誤報閃退）：{e}\r\n",
+                                util::now_str()
+                            ),
+                        );
+                    }
                 }
             }
             DefWindowProcW(hwnd, msg, wparam, lparam)
@@ -872,6 +894,7 @@ unsafe extern "system" fn main_wndproc(
             let ctx = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut MainCtx;
             if !ctx.is_null() {
                 let c = &mut *ctx;
+                util::append_log(&c.app, "[System] 已正常結束（結束程式）");
                 remove_tray(hwnd);
                 KillTimer(hwnd, IDT_TIMER as usize);
                 if !c.font_status.is_null() {

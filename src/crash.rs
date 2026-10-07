@@ -64,6 +64,11 @@ pub fn take_stale_marker(marker_path: &str) -> Option<String> {
 }
 
 /// 正常（或系統可預期結束：關機／登出）離開時移除標記。
-pub fn remove_run_marker(marker_path: &str) {
-    let _ = fs::remove_file(marker_path);
+/// 回傳 Err 代表「應移除但失敗」（檔案不存在視為成功，避免重複移除誤報）。
+pub fn remove_run_marker(marker_path: &str) -> std::io::Result<()> {
+    match fs::remove_file(marker_path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
+    }
 }

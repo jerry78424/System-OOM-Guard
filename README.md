@@ -59,7 +59,8 @@ cargo build --release
 ## 閃退偵測與記錄
 `release` 採用 `panic = "abort"`，任何 panic／存取違規／堆疊溢出／OOM 都會讓程式瞬間結束且不經正常清理。為此有兩層攔截：
 - **Panic 攔截器**：安裝於 `main` 最前段，把 panic 的執行緒、訊息、來源 `檔案:行號` 附加到 `crash.log`。Windows 下存取違規也會經 panic 機制，故多數硬崩潰都能留下來源。（`--crashtest` 可自測此路徑。）
-- **執行中 sentinel（`run.pid`）**：啟動寫入目前 PID＋啟動時間；正常結束、或收到系統關機／重啟／登出（`WM_ENDSESSION`）時移除。下次啟動若標記仍殘留，代表上次**未正常結束**（可能堆疊溢出／OOM／被外部終止等不經 hook 的死法），會同時在 `System-OOM-Guard.log` 與 `crash.log` 記錄「上次未正常結束」及前次標記。
+- **執行中 sentinel（`run.pid`）**：啟動寫入目前 PID＋啟動時間；正常結束、或收到系統關機／重啟／登出（`WM_ENDSESSION`）時移除（移除失敗會記錄到 `crash.log`，避免偽裝成閃退）。下次啟動若標記仍殘留，代表上次**未正常結束**（可能堆疊溢出／OOM／被外部終止等不經 hook 的死法），會同時在 `System-OOM-Guard.log` 與 `crash.log` 記錄「上次未正常結束」及前次標記。
+- **可區分性**：正常結束會寫一行「已正常結束（結束程式）」；主視窗每 10 分鐘寫一行「心跳」，把閃退的「最後確認存活」時間縮到分鐘級。若外部以 `TerminateProcess` 終止本程式则完全無痕（不經 hook、不產生 WER），只能靠 sentinel＋心跳間接推定。
 - `crash.log`、`run.pid` 寫在執行檔資料夾（已列入 `.gitignore`，不提交）。
 
 ## 平台限制

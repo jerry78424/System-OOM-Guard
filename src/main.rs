@@ -103,6 +103,7 @@ fn main() {
         config_path,
         exe_path,
         marker_path: marker_path.clone(),
+        crash_path: crash_path.clone(),
         admin,
         exiting: AtomicBool::new(false),
         icons,
@@ -152,7 +153,12 @@ fn main() {
     }
 
     // 訊息迴圈正常返回（走 WM_DESTROY→PostQuitMessage 的乾淨結束路徑）：移除 sentinel
-    crash::remove_run_marker(&marker_path);
+    if let Err(e) = crash::remove_run_marker(&marker_path) {
+        crash::append_crash(
+            &crash_path,
+            &format!("[{}] [Crash] 正常結束但移除 run.pid 失敗（下次會誤報閃退）：{e}\r\n", util::now_str()),
+        );
+    }
 }
 
 fn try_elevate(args: &[String]) -> bool {
