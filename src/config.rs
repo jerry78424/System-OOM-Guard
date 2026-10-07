@@ -14,6 +14,7 @@ pub struct Config {
     #[serde(default = "default_auto_guard")] pub auto_guard: bool,
     #[serde(default = "default_kill_tree")] pub kill_tree: bool,
     #[serde(default = "default_revive_watch")] pub revive_watch: bool,
+    #[serde(default = "default_on_demand_priv")] pub on_demand_priv: bool,
     #[serde(default)] pub window_x: Option<i32>,
     #[serde(default)] pub window_y: Option<i32>,
     #[serde(default)] pub window_width: Option<i32>,
@@ -30,6 +31,7 @@ fn default_auto() -> bool { true }
 fn default_auto_guard() -> bool { true }
 fn default_kill_tree() -> bool { true }
 fn default_revive_watch() -> bool { true }
+fn default_on_demand_priv() -> bool { true }
 
 fn default_protected() -> Vec<String> {
     [
@@ -39,8 +41,6 @@ fn default_protected() -> Vec<String> {
         "StartMenuExperienceHost", "TextInputHost", "RuntimeBroker", "sihost",
         "taskhostw", "ctfmon", "dllhost", "conhost", "OpenConsole",
         "WindowsTerminal", "pwsh", "powershell", "WmiPrvSE", "MsMpEng",
-        // 遊戲與其反外掛：殺它們可能引來核心層反制（被反殺），預設不碰
-        "bluearchive", "grap-core64.aes",
     ].iter().map(|s| s.to_string()).collect()
 }
 
@@ -58,6 +58,7 @@ impl Default for Config {
             auto_guard: default_auto_guard(),
             kill_tree: default_kill_tree(),
             revive_watch: default_revive_watch(),
+            on_demand_priv: default_on_demand_priv(),
             window_x: None,
             window_y: None,
             window_width: None,

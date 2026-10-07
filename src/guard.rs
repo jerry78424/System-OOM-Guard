@@ -706,15 +706,20 @@ fn run_cycle(app: &App) {
         let mut lk = app.last_kill.lock().unwrap();
         let elapsed = lk.elapsed().unwrap_or(Duration::from_secs(u64::MAX));
         if elapsed.as_secs() >= cooldown as u64 {
-            // 權限只在終止窗口內持有（降低反外掛注視視窗）
-            if let Err(e) = enable_debug_privilege() {
-                util::append_log(
-                    app,
-                    &format!("[System] SeDebugPrivilege 啟用失敗（錯誤碼 {e}）：高權限進程可能無法終止"),
-                );
+            let on_demand = app.config.lock().unwrap().on_demand_priv;
+            // 按需模式：權限只在終止窗口內持有；常駐模式：執行緒啟動時已啟用
+            if on_demand {
+                if let Err(e) = enable_debug_privilege() {
+                    util::append_log(
+                        app,
+                        &format!("[System] SeDebugPrivilege 啟用失敗（錯誤碼 {e}）：高權限進程可能無法終止"),
+                    );
+                }
             }
             let killed = kill_top(app, maxkill as usize);
-            release_debug_privilege();
+            if on_demand {
+                release_debug_privilege();
+            }
             if killed > 0 {
                 *lk = SystemTime::now();
                 last_action = format!("已終止 {} 個進程", killed);
@@ -747,9 +752,26 @@ pub fn spawn_guard(app: Arc<App>, gen: u32) {
         .stack_size(512 * 1024)
         .spawn(move || {
             let app = worker;
-            // SeDebugPrivilege 探取按需啟用：只在終止窗口內短暫持有，
-            // 避免常駐持有权限成為反外掛的可疑特徵（見 run_cycle）。
-            util::append_log(&app, "[System] SeDebugPrivilege 採按需啟用（僅終止瞬間持有）");
+            let admin = app.admin;
+            // SeDebugPrivilege 持有方式由 OnDemandDebugPriv 決定：
+            // true=僅終止窗口內短暫持有（降低反外掛注視）；false=執行緒期間常駐持有。
+            if app.config.lock().unwrap().on_demand_priv {
+                util::append_log(&app, "[System] SeDebugPrivilege 採按需啟用（僅終止瞬間持有）");
+            } else {
+                match enable_debug_privilege() {
+                    Ok(()) => util::append_log(&app, "[System] SeDebugPrivilege 已啟用（可終止其他使用者／高權限進程）"),
+                    Err(1300) => util::append_log(
+                        &app,
+                        &format!(
+                            "[System] SeDebugPrivilege 未獲指派（錯誤碼 1300）：此處理程序不是提權管理員，或系統原則移除了 Debug programs 權限（管理員={admin}）"
+                        ),
+                    ),
+                    Err(e) => util::append_log(
+                        &app,
+                        &format!("[System] SeDebugPrivilege 啟用失敗（錯誤碼 {e}；管理員={admin}）"),
+                    ),
+                }
+            }
             loop {
                 if !app.running.load(Ordering::SeqCst) || app.generation.load(Ordering::SeqCst) != gen {
                     break;

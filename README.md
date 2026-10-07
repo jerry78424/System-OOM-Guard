@@ -48,7 +48,8 @@ cargo build --release
 | `AutoStart` | true | 開機自啟（登入排程任務） |
 | `AutoGuard` | true | 程式啟動後自動啟用護欄 |
 | `KillTree` | true | 終止時連帶殺死整棵子進程樹 |
-| `ReviveWatch` | true | 復活探活：每分鐘排程 `--watch`，被外部終止後 ≤60 秒自動重啟；正常結束會自動移除該排程 |
+| `ReviveWatch` | true | 復活探活：每分鐘排程 `--watch`，被外部終止後 ≤60 秒自動重啟；正常結束會自動移除該排程（可在設定勾選） |
+| `OnDemandDebugPriv` | true | `SeDebugPrivilege` 僅在終止動作的瞬間啟用、完即釋放；取消勾選則改為護欄常駐持有（相容性最高但最可疑） |
 
 `config.json` 與 `System-OOM-Guard.log` 會寫在執行檔所在資料夾（已列入 `.gitignore`，不提交）。
 
@@ -68,7 +69,7 @@ cargo build --release
 ## 與反外掛共存
 反外掛多具備核心層權限與 `SeDebugPrivilege`，可繞過任何用戶態防護——「不被殺」做不到，能做的是不給它動手理由＋被殺後自動復活：
 - **按需權限**：`SeDebugPrivilege` 只在終止動作的瞬間啟用、完即釋放（常駐持有該權限是高可疑特徵）。
-- **預設保護名單**含遊戲與其反外掛（`bluearchive`、`grap-core64.aes`）：護欄不會去殺它們，避免引來反制。
+- **保護名單**：把你玩的遊戲與其反外掛程序名（例：`bluearchive`、`grap-core64.aes`）加入設定的「受保護進程」——護欄永遠不會殺它們，避免引來核心層反制。（不內建硬編碼，由使用者依自己的遊戲自行維護。）
 - **復活探活**（`ReviveWatch`）：每分鐘排程工作以 `--watch` 探活，被殺 ≤60 秒復活；托盤「結束」正常退出會自動移除此排程，不干預自願退出。
 
 ## 平台限制

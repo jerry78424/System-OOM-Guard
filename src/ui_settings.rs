@@ -32,7 +32,7 @@ const SETTINGS_STYLE: u32 = (WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKF
 
 fn settings_client_min(scale: f32) -> (i32, i32) {
     let s = |v: i32| (v as f32 * scale).round() as i32;
-    (s(536), s(580))
+    (s(536), s(640))
 }
 
 unsafe fn settings_window_min(scale: f32) -> (i32, i32) {
@@ -54,6 +54,8 @@ const IDC_PROTECTED: usize = 7;
 const IDC_AUTOSTART: usize = 8;
 const IDC_AUTOGUARD: usize = 11;
 const IDC_KILLTREE: usize = 12;
+const IDC_ONDEMAND: usize = 13;
+const IDC_REVIVE: usize = 14;
 const IDC_SAVE: usize = 9;
 const IDC_CANCEL: usize = 10;
 
@@ -72,6 +74,8 @@ struct SettingsCtx {
     autostart: HWND,
     autoguard: HWND,
     killtree: HWND,
+    ondemand: HWND,
+    revive: HWND,
     l_trigger: HWND,
     l_recover: HWND,
     l_interval: HWND,
@@ -101,6 +105,8 @@ pub unsafe fn show_settings(app: Arc<App>, parent: HWND) {
         autostart: std::ptr::null_mut(),
         autoguard: std::ptr::null_mut(),
         killtree: std::ptr::null_mut(),
+        ondemand: std::ptr::null_mut(),
+        revive: std::ptr::null_mut(),
         l_trigger: std::ptr::null_mut(),
         l_recover: std::ptr::null_mut(),
         l_interval: std::ptr::null_mut(),
@@ -121,7 +127,7 @@ pub unsafe fn show_settings(app: Arc<App>, parent: HWND) {
         CW_USEDEFAULT,
         CW_USEDEFAULT,
         540,
-        560,
+        620,
         parent,
         std::ptr::null_mut(),
         GetModuleHandleW(std::ptr::null()),
@@ -250,6 +256,8 @@ unsafe fn recreate_font(c: &mut SettingsCtx, dpi: u32) {
         c.autostart,
         c.autoguard,
         c.killtree,
+        c.ondemand,
+        c.revive,
         c.l_trigger,
         c.l_recover,
         c.l_interval,
@@ -304,6 +312,10 @@ unsafe fn layout_settings(c: &mut SettingsCtx, dpi: u32) {
     MoveWindow(c.autoguard, ex, y, ew, s(24), 1);
     y += s(30);
     MoveWindow(c.killtree, ex, y, ew, s(24), 1);
+    y += s(30);
+    MoveWindow(c.ondemand, ex, y, ew, s(24), 1);
+    y += s(30);
+    MoveWindow(c.revive, ex, y, ew, s(24), 1);
 
     let btn_y = ch - s(38);
     let btn_h = s(30);
@@ -352,6 +364,8 @@ unsafe fn save_settings(c: &mut SettingsCtx) {
     let auto = SendMessageW(c.autostart, BM_GETCHECK, 0, 0) as u32 == BST_CHECKED;
     let auto_guard = SendMessageW(c.autoguard, BM_GETCHECK, 0, 0) as u32 == BST_CHECKED;
     let kill_tree = SendMessageW(c.killtree, BM_GETCHECK, 0, 0) as u32 == BST_CHECKED;
+    let on_demand = SendMessageW(c.ondemand, BM_GETCHECK, 0, 0) as u32 == BST_CHECKED;
+    let revive = SendMessageW(c.revive, BM_GETCHECK, 0, 0) as u32 == BST_CHECKED;
 
     let new_cfg = {
         let mut guard = c.app.config.lock().unwrap();
@@ -365,6 +379,8 @@ unsafe fn save_settings(c: &mut SettingsCtx) {
         guard.auto_start = auto;
         guard.auto_guard = auto_guard;
         guard.kill_tree = kill_tree;
+        guard.on_demand_priv = on_demand;
+        guard.revive_watch = revive;
         guard.clone()
     };
     new_cfg.save(&c.app.config_path);
@@ -374,6 +390,11 @@ unsafe fn save_settings(c: &mut SettingsCtx) {
         autostart::enable(&c.app.exe_path);
     } else {
         autostart::disable();
+    }
+    if new_cfg.revive_watch {
+        autostart::enable_watch(&c.app.exe_path);
+    } else {
+        autostart::disable_watch();
     }
 
     util::append_log(&c.app, "設定已儲存");
@@ -480,6 +501,22 @@ unsafe extern "system" fn settings_wndproc(
                 0,
                 IDC_KILLTREE,
             );
+            c.ondemand = create_ctl(
+                hwnd,
+                &util::to_wide("BUTTON"),
+                &util::to_wide("Debug 權限僅終止瞬間啟用（降低反外掛注視，預設）"),
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX as u32,
+                0,
+                IDC_ONDEMAND,
+            );
+            c.revive = create_ctl(
+                hwnd,
+                &util::to_wide("BUTTON"),
+                &util::to_wide("被外部終止後 1 分鐘內自動復活（正常結束會移除排程）"),
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX as u32,
+                0,
+                IDC_REVIVE,
+            );
 
             let label_style = WS_CHILD | WS_VISIBLE;
             c.l_trigger = create_ctl(
@@ -580,6 +617,18 @@ unsafe extern "system" fn settings_wndproc(
                 c.killtree,
                 BM_SETCHECK,
                 if cfg.kill_tree { BST_CHECKED as usize } else { 0 },
+                0,
+            );
+            SendMessageW(
+                c.ondemand,
+                BM_SETCHECK,
+                if cfg.on_demand_priv { BST_CHECKED as usize } else { 0 },
+                0,
+            );
+            SendMessageW(
+                c.revive,
+                BM_SETCHECK,
+                if cfg.revive_watch { BST_CHECKED as usize } else { 0 },
                 0,
             );
             drop(cfg);
