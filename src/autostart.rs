@@ -22,6 +22,7 @@ pub fn enable(exe_path: &str) {
         .args(["/Create", "/TN", TASK_NAME, "/TR", &tr, "/SC", "ONLOGON", "/RL", "HIGHEST", "/F"])
         .creation_flags(CREATE_NO_WINDOW)
         .output();
+    fix_limits();
 }
 
 pub fn disable() {
@@ -39,11 +40,24 @@ pub fn enable_watch(exe_path: &str) {
         .args(["/Create", "/TN", WATCH_TASK, "/TR", &tr, "/SC", "MINUTE", "/MO", "1", "/RL", "HIGHEST", "/F"])
         .creation_flags(CREATE_NO_WINDOW)
         .output();
+    fix_limits();
 }
 
 pub fn disable_watch() {
     let _ = Command::new("schtasks.exe")
         .args(["/Delete", "/TN", WATCH_TASK, "/F"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+}
+
+/// schtasks 建立的排程若未明確設定 ExecutionTimeLimit，排程引擎會套用
+/// 72 小時預設「逾時即停止工作」——主程式若被 watch 實例收編（探活時無人
+/// 在跑、watcher 自我提權後成為主實例），72 小時後就會被排程 TerminateProcess。
+/// 明確設 PT0S＝無限期，消除這個自我終止路徑。
+pub fn fix_limits() {
+    let cmd = "$names='System-OOM-Guard','System-OOM-Guard-Watch'; foreach($n in $names){ $t=Get-ScheduledTask -TaskName $n -EA SilentlyContinue; if($t){ $t.Settings.ExecutionTimeLimit='PT0S'; Set-ScheduledTask -TaskName $n -Settings $t.Settings | Out-Null } }";
+    let _ = Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", cmd])
         .creation_flags(CREATE_NO_WINDOW)
         .output();
 }

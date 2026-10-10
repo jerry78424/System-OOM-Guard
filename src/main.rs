@@ -132,6 +132,9 @@ fn main() {
     } else {
         autostart::disable_watch();
     }
+    // 修正排程時限：schtasks 未寫 ExecutionTimeLimit 時引擎預設 72 小時逾時即停，
+    // 曾把被 watch 實例收編的常駐主體終止掉；每次啟動都明確改回 PT0S（無限期）。
+    autostart::fix_limits();
 
     unsafe {
         ui_main::register_main_class();
