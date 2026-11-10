@@ -10,7 +10,7 @@ use windows_sys::Win32::Graphics::Gdi::{
     FW_BOLD, FW_NORMAL, HBRUSH, HFONT, TRANSPARENT,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows_sys::Win32::UI::Controls::{EM_REPLACESEL, EM_SCROLLCARET, EM_SETSEL};
+use windows_sys::Win32::UI::Controls::{EM_REPLACESEL, EM_SCROLLCARET, EM_SETLIMITTEXT, EM_SETSEL};
 use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::EnableWindow;
 use windows_sys::Win32::UI::Shell::{
@@ -370,8 +370,11 @@ unsafe fn append_log_block(hwnd: HWND, text: &str) {
     // 用實際長度定位到結尾（比 -1,-1 寫法在各 EDIT 實作上更可靠）
     SendMessageW(hwnd, EM_SETSEL, len as usize, len as isize);
     let mut w = util::to_wide(text);
-    w.insert(0, b'\n' as u16);
-    w.insert(0, b'\r' as u16);
+    // text 為行間 join（無行尾換行）；僅在非空控制項前補一個 \r\n，避免重複換行變空行
+    if len > 0 {
+        w.insert(0, b'\n' as u16);
+        w.insert(0, b'\r' as u16);
+    }
     SendMessageW(hwnd, EM_REPLACESEL, 0, w.as_ptr() as isize);
     SendMessageW(hwnd, EM_SCROLLCARET, 0, 0);
 }
@@ -459,8 +462,10 @@ unsafe fn update_status(c: &mut MainCtx) {
         let mut q = app.log_queue.lock().unwrap();
         let mut out = String::new();
         while let Some(line) = q.pop_front() {
+            if !out.is_empty() {
+                out.push_str("\r\n");
+            }
             out.push_str(&line);
-            out.push_str("\r\n");
         }
         out
     };
@@ -612,6 +617,9 @@ unsafe extern "system" fn main_wndproc(
                 WS_EX_CLIENTEDGE,
                 IDC_LOG,
             );
+            // 多行 EDIT 預設約 3 萬字元上限：填滿後 EM_REPLACESEL 靜默失敗，
+            // 新 log 不再顯示且最後一行被切斷；0＝無上限（由 400K 平滑裁切控管）
+            SendMessageW(c.log, EM_SETLIMITTEXT, 0, 0);
             c.start = create_ctl(
                 hwnd,
                 &util::to_wide("BUTTON"),
